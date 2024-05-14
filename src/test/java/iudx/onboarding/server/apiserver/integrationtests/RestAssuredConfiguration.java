@@ -16,12 +16,9 @@ public class RestAssuredConfiguration implements BeforeAllCallback {
   @Override
   public void beforeAll(ExtensionContext context) {
     JsonObject config = Configuration.getConfiguration("./secrets/all-verticles-configs/config-test.json", 0);
-    // String testHost = config.getString("ip");
     String authServerHost = config.getString("authServerHost");
-    // String authUrl=config.getString("authUrl");
     boolean testOnDepl = Boolean.parseBoolean(System.getProperty("intTestDepl"));
     if (testOnDepl) {
-//      String testHost = "onboarding.iudx.io";
       String testHost = config.getString("testHost");
       baseURI = "https://" + testHost;
       port = 443;
@@ -53,7 +50,6 @@ public class RestAssuredConfiguration implements BeforeAllCallback {
       proxy(proxyHost, Integer.parseInt(proxyPort));
     }
 
-    LOGGER.debug("baseURI=" + baseURI);
     LOGGER.debug("setting up the tokens");
     TokenSetup.setupTokens(
       authEndpoint,
@@ -61,8 +57,6 @@ public class RestAssuredConfiguration implements BeforeAllCallback {
 
     // Wait for tokens to be available before proceeding
     waitForTokens();
-
-    // LOGGER.debug();("done with setting up the tokens");
 
     enableLoggingOfRequestAndResponseIfValidationFails();
   }
@@ -72,7 +66,7 @@ public class RestAssuredConfiguration implements BeforeAllCallback {
     int attempt = 0;
 
     // Keep trying to get tokens until they are available or max attempts are reached
-    while ((cosAdminToken == null || rsAdminToken == null || token == null || providerToken == null)
+    while ((cosAdminToken == null || rsAdminToken == null || providerToken == null)
       && attempt < maxAttempts) {
       LOGGER.debug("Waiting for tokens to be available. Attempt: " + (attempt + 1));
       // Introduce a delay between attempts
@@ -84,7 +78,7 @@ public class RestAssuredConfiguration implements BeforeAllCallback {
       attempt++;
     }
 
-    if (cosAdminToken == null || rsAdminToken == null || token == null || providerToken == null) {
+    if (cosAdminToken == null || rsAdminToken == null || providerToken == null) {
       // Log an error or throw an exception if tokens are still not available
       throw new RuntimeException("Failed to retrieve tokens after multiple attempts.");
     } else {

@@ -1,5 +1,7 @@
 package iudx.onboarding.server.catalogue.service;
 
+import static iudx.onboarding.server.common.Constants.TOKEN;
+
 import io.vertx.core.Future;
 import io.vertx.core.Promise;
 import io.vertx.core.Vertx;
@@ -10,6 +12,7 @@ import io.vertx.ext.web.client.WebClientOptions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import static iudx.onboarding.server.common.Constants.ID;
 import static iudx.onboarding.server.common.Constants.TOKEN;
 
 public class LocalCatImpl implements CatalogueService {
@@ -56,7 +59,7 @@ public class LocalCatImpl implements CatalogueService {
             } else {
               promise.fail(httpResponseAsyncResult.result().bodyAsString());
             }
-            ; // Fail the promise with the failure cause
+            // Fail the promise with the failure cause
           }
         });
     return promise.future();
@@ -83,7 +86,7 @@ public class LocalCatImpl implements CatalogueService {
             } else {
               promise.fail(httpResponseAsyncResult.result().bodyAsString());
             }
-            ; // Fail the promise with the failure cause
+            // Fail the promise with the failure cause
           }
         });
     return promise.future();
@@ -110,7 +113,7 @@ public class LocalCatImpl implements CatalogueService {
             } else {
               promise.fail(httpResponseAsyncResult.result().bodyAsString());
             }
-            ; // Fail the promise with the failure cause
+            // Fail the promise with the failure cause
           }
         });
     return promise.future(); // Return the future outside the callback function
@@ -134,10 +137,10 @@ public class LocalCatImpl implements CatalogueService {
               LOGGER.info("Failure {}", httpResponseAsyncResult.cause());
               promise.fail(cause);
             } else {
-              LOGGER.debug("get item fail :{}",httpResponseAsyncResult.result().bodyAsString());
+              LOGGER.debug("get item fail :{}", httpResponseAsyncResult.result().bodyAsString());
               promise.fail(httpResponseAsyncResult.result().bodyAsString());
             }
-            ; // Fail the promise with the failure cause
+            // Fail the promise with the failure cause
           }
         });
     return promise.future();
@@ -172,11 +175,19 @@ public class LocalCatImpl implements CatalogueService {
   }
 
   @Override
-  public Future<JsonObject> createInstance(JsonObject request, String token) {
+  public Future<JsonObject> createInstance(JsonObject request, String path, String token) {
     Promise<JsonObject> promise = Promise.promise();
     request.remove(TOKEN);
+
+    LOGGER.error(token);
+    LOGGER.error(path);
+    LOGGER.error(request);
+    LOGGER.error(request.getString(ID));
     catWebClient
-        .post(catPort, catHost, catBasePath.concat("/internal/ui/instance"))
+        .post(catPort, catHost, catBasePath.concat(path.concat("/instance")))
+
+        .setQueryParam(ID, request.getString(ID))
+
         .putHeader("token", token)
         .putHeader("Content-Type", "application/json")
         .sendJsonObject(
@@ -196,19 +207,19 @@ public class LocalCatImpl implements CatalogueService {
                 } else {
                   promise.fail(httpResponseAsyncResult.result().bodyAsString());
                 }
-                ; // Fail the promise with the failure cause
+                // Fail the promise with the failure cause
               }
             });
     return promise.future();
   }
 
   @Override
-  public Future<JsonObject> getInstance(String id) {
+  public Future<JsonObject> getInstance(String id, String path) {
     LOGGER.info("id" + id);
     Promise<JsonObject> promise = Promise.promise();
     catWebClient
-        .get(catPort, catHost, catBasePath.concat("/internal/ui/instance"))
-        .addQueryParam("id", id)
+        .get(catPort, catHost, catBasePath.concat(path.concat("/instance")))
+        .addQueryParam(ID, id)
         .send(
             httpResponseAsyncResult -> {
               if (httpResponseAsyncResult.succeeded()
@@ -223,7 +234,7 @@ public class LocalCatImpl implements CatalogueService {
                 } else {
                   promise.fail(httpResponseAsyncResult.result().bodyAsString());
                 }
-                ; // Fail the promise with the failure cause
+                // Fail the promise with the failure cause
               }
             });
     return promise.future();
@@ -237,7 +248,7 @@ public class LocalCatImpl implements CatalogueService {
         .put(catPort, catHost, catBasePath.concat("/internal/ui/instance"))
         .putHeader("token", token)
         .putHeader("Content-Type", "application/json")
-        .addQueryParam("id", id)
+        .addQueryParam(ID, id)
         .sendJsonObject(
             request,
             httpResponseAsyncResult -> {
@@ -254,20 +265,20 @@ public class LocalCatImpl implements CatalogueService {
                 } else {
                   promise.fail(httpResponseAsyncResult.result().bodyAsString());
                 }
-                ; // Fail the promise with the failure cause
+                // Fail the promise with the failure cause
               }
             });
     return promise.future();
   }
 
   @Override
-  public Future<JsonObject> deleteInstance(String id, String token) {
+  public Future<JsonObject> deleteInstance(String id, String path, String token) {
     Promise<JsonObject> promise = Promise.promise();
     catWebClient
-        .delete(catPort, catHost, catBasePath.concat("/internal/ui/instance"))
+        .delete(catPort, catHost, catBasePath.concat(path.concat("/instance")))
         .putHeader("token", token)
         .putHeader("Content-Type", "application/json")
-        .addQueryParam("id", id)
+        .addQueryParam(ID, id)
         .send(
             httpResponseAsyncResult -> {
               if (httpResponseAsyncResult.succeeded()
@@ -285,7 +296,7 @@ public class LocalCatImpl implements CatalogueService {
                 } else {
                   promise.fail(httpResponseAsyncResult.result().bodyAsString());
                 }
-                ; // Fail the promise with the failure cause
+                // Fail the promise with the failure cause
               }
             });
     return promise.future(); // Return the future outside the callback function
@@ -316,7 +327,7 @@ public class LocalCatImpl implements CatalogueService {
                 } else {
                   promise.fail(httpResponseAsyncResult.result().bodyAsString());
                 }
-                ; // Fail the promise with the failure cause
+                // Fail the promise with the failure cause
               }
             });
     return promise.future();
@@ -343,7 +354,7 @@ public class LocalCatImpl implements CatalogueService {
                 } else {
                   promise.fail(httpResponseAsyncResult.result().bodyAsString());
                 }
-                ; // Fail the promise with the failure cause
+                // Fail the promise with the failure cause
               }
             });
     return promise.future();
@@ -374,7 +385,7 @@ public class LocalCatImpl implements CatalogueService {
                 } else {
                   promise.fail(httpResponseAsyncResult.result().bodyAsString());
                 }
-                ; // Fail the promise with the failure cause
+                // Fail the promise with the failure cause
               }
             });
     return promise.future();
@@ -405,7 +416,7 @@ public class LocalCatImpl implements CatalogueService {
                 } else {
                   promise.fail(httpResponseAsyncResult.result().bodyAsString());
                 }
-                ; // Fail the promise with the failure cause
+                // Fail the promise with the failure cause
               }
             });
     return promise.future(); // Return the future outside the callback function

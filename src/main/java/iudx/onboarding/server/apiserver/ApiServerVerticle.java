@@ -1,5 +1,9 @@
 package iudx.onboarding.server.apiserver;
 
+import static iudx.onboarding.server.apiserver.util.Constants.*;
+import static iudx.onboarding.server.apiserver.util.Util.errorResponse;
+import static iudx.onboarding.server.common.Constants.*;
+
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
 import io.vertx.core.MultiMap;
@@ -24,18 +28,13 @@ import iudx.onboarding.server.common.CatalogueType;
 import iudx.onboarding.server.common.HttpStatusCode;
 import iudx.onboarding.server.resourceserver.ResourceServerService;
 import iudx.onboarding.server.token.TokenService;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Stream;
-
-import static iudx.onboarding.server.apiserver.util.Constants.*;
-import static iudx.onboarding.server.apiserver.util.Util.errorResponse;
-import static iudx.onboarding.server.common.Constants.*;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
  * The Onboarding Server API Verticle.
@@ -70,7 +69,6 @@ public class ApiServerVerticle extends AbstractVerticle {
   private TokenService tokenService;
   private CatalogueUtilService catalogueService;
   private ResourceServerService resourceServerService;
-  private LocalCatImpl localCat;
 
   /**
    * This method is used to start the Verticle. It deploys a verticle in a cluster, reads the
@@ -112,16 +110,21 @@ public class ApiServerVerticle extends AbstractVerticle {
     router.delete(api.getOnboardingUrl()).failureHandler(exceptionHandler).handler(this::deleteItem);
 
     // instance API
-    router.post(api.getInstanceUrl()).failureHandler(exceptionHandler).handler(this::createInstance);
-    router.delete(api.getInstanceUrl()).failureHandler(exceptionHandler).handler(this::deleteInstance);
-    router.put(api.getInstanceUrl()).failureHandler(exceptionHandler).handler(this::updateInstance);
-    router.get(api.getInstanceUrl()).failureHandler(exceptionHandler).handler(this::getAllInstance);
+    router.post(api.getInstanceApi()).handler(this::createInstance).failureHandler(exceptionHandler);
+    router.get(api.getInstanceApi()).handler(this::getAllInstance).failureHandler(exceptionHandler);
+    router.delete(api.getInstanceApi()).handler(this::deleteInstance).failureHandler(exceptionHandler);
 
-    // domain API
-    router.post(api.getDomainUrl()).failureHandler(exceptionHandler).handler(this::createDomain);
-    router.delete(api.getDomainUrl()).failureHandler(exceptionHandler).handler(this::deleteDomain);
-    router.put(api.getDomainUrl()).failureHandler(exceptionHandler).handler(this::updateDomain);
-    router.get(api.getDomainUrl()).failureHandler(exceptionHandler).handler(this::getDomain);
+    // mlayer - instance API
+    router.post(api.getMlayerInstanceApi()).failureHandler(exceptionHandler).handler(this::createInstance);
+    router.delete(api.getMlayerInstanceApi()).failureHandler(exceptionHandler).handler(this::deleteInstance);
+    router.put(api.getMlayerInstanceApi()).failureHandler(exceptionHandler).handler(this::updateInstance);
+    router.get(api.getMlayerInstanceApi()).failureHandler(exceptionHandler).handler(this::getAllInstance);
+
+    // mlayer - domain API
+    router.post(api.getMlayerDomainApi()).failureHandler(exceptionHandler).handler(this::createDomain);
+    router.delete(api.getMlayerDomainApi()).failureHandler(exceptionHandler).handler(this::deleteDomain);
+    router.put(api.getMlayerDomainApi()).failureHandler(exceptionHandler).handler(this::updateDomain);
+    router.get(api.getMlayerDomainApi()).failureHandler(exceptionHandler).handler(this::getDomain);
 
     // documentation apis
     router.get("/apis/spec")
@@ -268,6 +271,7 @@ public class ApiServerVerticle extends AbstractVerticle {
             RespBuilder respBuilder = new RespBuilder()
                 .withType("urn:dx:cat:Success")
                 .withTitle("Success")
+                .withDetail("Success: Item has been created successfully")
                 .withResult(resultContainer.result);
             response
                 .setStatusCode(201)
@@ -346,7 +350,7 @@ public class ApiServerVerticle extends AbstractVerticle {
   private Future<JsonObject> deleteAdapterForResourceGroup(String id, MultiMap tokenHeaderMap) {
     Promise<JsonObject> promise = Promise.promise();
     LOGGER.debug("delete adapter started");
-    catalogueService.getItem(id,CatalogueType.LOCAL)
+    catalogueService.getItem(id, CatalogueType.LOCAL)
         .compose(localCatResult -> {
           LOGGER.debug("debugging localCat :{}", localCatResult);
           String itemType = dxItemType(localCatResult.getJsonArray("results").getJsonObject(0).getJsonArray("type"));
@@ -422,30 +426,38 @@ public class ApiServerVerticle extends AbstractVerticle {
 
   private void createInstance(RoutingContext routingContext) {
     MultiMap tokenHeadersMap = routingContext.request().headers();
+    HttpServerRequest request = routingContext.request();
     HttpServerResponse response = routingContext.response();
-    JsonObject requestBody = routingContext.body().asJsonObject();
+    String path = request.path().contains("/internal/ui") ? "/internal/ui" : "";
+    JsonObject requestBody
+        = path.isEmpty() ? new JsonObject().put(ID, routingContext.queryParams().get(ID)) : routingContext.body().asJsonObject();
     response.putHeader(CONTENT_TYPE, APPLICATION_JSON);
     catalogueService
-        .createInstance(requestBody, tokenHeadersMap.get(TOKEN), CatalogueType.LOCAL)
+        .createInstance(path, requestBody, tokenHeadersMap.get(TOKEN), CatalogueType.LOCAL)
         .onSuccess(
             localInstance -> {
               LOGGER.info("results after local cat{}", localInstance);
-              String instanceId =
-                  localInstance.getJsonArray(RESULTS).getJsonObject(0).getString("id");
-              requestBody.put("instanceId", instanceId);
+              if (!path.isEmpty()) {
+                String instanceId =
+                    localInstance.getJsonArray(RESULTS).getJsonObject(0).getString("id");
+                localInstance.put(DETAIL, "Success: Instance has been created successfully");
+                requestBody.put("instanceId", instanceId);
+              }
               LOGGER.info("request body" + requestBody);
               if (isUacAvailable) {
                 catalogueService
-                    .createInstance(requestBody, tokenHeadersMap.get(TOKEN), CatalogueType.CENTRAL)
+                    .createInstance(path, requestBody, tokenHeadersMap.get(TOKEN), CatalogueType.CENTRAL)
                     .onSuccess(
                         centralInstance -> {
+                          centralInstance.put(
+                              DETAIL, "Success: Instance has been created successfully");
                           response.setStatusCode(201).end(centralInstance.toString());
                         })
                     .onFailure(
                         centralinstance -> {
                           // This is after 3 retries and delete of item from local
                           // TODO: notify user to try again
-                          response.setStatusCode(500).end(centralinstance.getMessage());
+                          handleResponse(response, centralinstance);
                         });
               } else {
 
@@ -465,14 +477,16 @@ public class ApiServerVerticle extends AbstractVerticle {
     HttpServerRequest request = routingContext.request();
     HttpServerResponse response = routingContext.response();
     response.putHeader(CONTENT_TYPE, APPLICATION_JSON);
+    String path = request.path().contains("/internal/ui") ? "/internal/ui" : "";
     catalogueService
-        .getInstance(request.getParam(ID), CatalogueType.LOCAL)
+        .getInstance(request.getParam(ID), path, CatalogueType.LOCAL)
         .onSuccess(
             getLocalItemSuccessHandler -> {
               LOGGER.info("Response {}", getLocalItemSuccessHandler);
               LOGGER.info(
                   "item taken from local cat {}", getLocalItemSuccessHandler.getJsonArray(RESULTS));
               // call only if response is 200 -success
+              getLocalItemSuccessHandler.put(DETAIL, "Success: Instance fetched successfully");
               response.setStatusCode(200).end(getLocalItemSuccessHandler.toString());
             })
         .onFailure(
@@ -495,6 +509,7 @@ public class ApiServerVerticle extends AbstractVerticle {
         .updateInstance(id, requestBody, tokenHeadersMap.get(TOKEN), CatalogueType.LOCAL)
         .onSuccess(
             updateLocalItemSuccessHandler -> {
+              updateLocalItemSuccessHandler.put(DETAIL, "Instance Updated Successfully");
               JsonObject localUpdateResponse = updateLocalItemSuccessHandler;
               LOGGER.debug(
                   "item updated in local cat {}", localUpdateResponse.getJsonArray(RESULTS));
@@ -505,6 +520,7 @@ public class ApiServerVerticle extends AbstractVerticle {
                         id, requestBody, tokenHeadersMap.get(TOKEN), CatalogueType.CENTRAL)
                     .onSuccess(
                         updateCentralCatItemSuccess -> {
+                          updateCentralCatItemSuccess.put(DETAIL, "Instance Updated Successfully");
                           response.setStatusCode(200).end(updateCentralCatItemSuccess.toString());
                         })
                     .onFailure(
@@ -533,18 +549,21 @@ public class ApiServerVerticle extends AbstractVerticle {
     HttpServerResponse response = routingContext.response();
     JsonObject requestBody = new JsonObject().put(ID, request.getParam(ID));
     response.putHeader(CONTENT_TYPE, APPLICATION_JSON);
+    String path = request.path().contains("/internal/ui") ? "/internal/ui" : "";
     catalogueService
-        .deleteInstance(requestBody, tokenHeadersMap.get(TOKEN), CatalogueType.LOCAL)
+        .deleteInstance(path, requestBody, tokenHeadersMap.get(TOKEN), CatalogueType.LOCAL)
         .onSuccess(
             localInstance -> {
+              localInstance.put(DETAIL, "Instance deleted Successfully");
               LOGGER.debug(
                   "item deleted in local cat {}", localInstance.getJsonArray(RESULTS));
 
               if (isUacAvailable) {
                 catalogueService
-                    .deleteInstance(requestBody, tokenHeadersMap.get(TOKEN), CatalogueType.CENTRAL)
+                    .deleteInstance(path, requestBody, tokenHeadersMap.get(TOKEN), CatalogueType.CENTRAL)
                     .onSuccess(
                         deleteCentralCatItemSuccess -> {
+                          deleteCentralCatItemSuccess.put(DETAIL, "Instance deleted Successfully");
                           LOGGER.debug(
                               "item deleted in central cat {}",
                               deleteCentralCatItemSuccess.getJsonArray(RESULTS));
@@ -578,6 +597,7 @@ public class ApiServerVerticle extends AbstractVerticle {
         .createDomain(requestBody, tokenHeadersMap.get(TOKEN), CatalogueType.LOCAL)
         .onSuccess(
             localDomain -> {
+              localDomain.put(DETAIL, "domain Created Successfully");
               LOGGER.info("results after local cat{}", localDomain);
               String domainId = localDomain.getJsonArray(RESULTS).getJsonObject(0).getString("id");
               requestBody.put("domainId", domainId);
@@ -587,6 +607,7 @@ public class ApiServerVerticle extends AbstractVerticle {
                     .createDomain(requestBody, tokenHeadersMap.get(TOKEN), CatalogueType.CENTRAL)
                     .onSuccess(
                         centralInstance -> {
+                          centralInstance.put(DETAIL, "domain Created Successfully");
                           response.setStatusCode(201).end(centralInstance.toString());
                         })
                     .onFailure(
@@ -618,7 +639,7 @@ public class ApiServerVerticle extends AbstractVerticle {
         .deleteDomain(requestBody, tokenHeadersMap.get(TOKEN), CatalogueType.LOCAL)
         .onSuccess(
             deleteLocalDomain -> {
-              JsonObject localCreateResponse = deleteLocalDomain;
+              deleteLocalDomain.put(DETAIL, "Domain deleted Successfully");
               LOGGER.debug("item deleted in local cat {}", deleteLocalDomain.getJsonArray(RESULTS));
 
               if (isUacAvailable) {
@@ -626,6 +647,7 @@ public class ApiServerVerticle extends AbstractVerticle {
                     .deleteDomain(requestBody, tokenHeadersMap.get(TOKEN), CatalogueType.CENTRAL)
                     .onSuccess(
                         deleteCentralDomain -> {
+                          deleteCentralDomain.put(DETAIL, "Domain deleted Successfully");
                           LOGGER.debug(
                               "item deleted in central cat {}",
                               deleteCentralDomain.getJsonArray(RESULTS));
@@ -662,6 +684,7 @@ public class ApiServerVerticle extends AbstractVerticle {
         .updateDomain(id, requestBody, tokenHeadersMap.get(TOKEN), CatalogueType.LOCAL)
         .onSuccess(
             updateLocalDomain -> {
+              updateLocalDomain.put(DETAIL, "Domain Updated Successfully");
               LOGGER.debug(
                   "domain updated in local cat {}", updateLocalDomain.getJsonArray(RESULTS));
 
@@ -670,6 +693,7 @@ public class ApiServerVerticle extends AbstractVerticle {
                     .updateDomain(id, requestBody, tokenHeadersMap.get(TOKEN), CatalogueType.CENTRAL)
                     .onSuccess(
                         updateCentralDomainSuccess -> {
+                          updateCentralDomainSuccess.put(DETAIL, "Domain Updated Successfully");
                           response.setStatusCode(200).end(updateCentralDomainSuccess.toString());
                         })
                     .onFailure(
@@ -699,6 +723,7 @@ public class ApiServerVerticle extends AbstractVerticle {
         .getDomain(request.getParam(ID), CatalogueType.LOCAL)
         .onSuccess(
             getLocalDomainSuccess -> {
+              getLocalDomainSuccess.put(DETAIL, "Domain fetched Successfully");
               LOGGER.info("Response {}", getLocalDomainSuccess);
               LOGGER.info(
                   "item taken from local cat {}", getLocalDomainSuccess.getJsonArray(RESULTS));
@@ -731,9 +756,9 @@ public class ApiServerVerticle extends AbstractVerticle {
       response.setStatusCode(400).end(errorMessage);
     } else if (errorMessage.contains(":LinkValidationFailed")) {
       response.setStatusCode(400).end(errorMessage);
-    } else if(errorMessage.contains(":urn:dx:cat:InvalidUUID")){
+    } else if (errorMessage.contains(":urn:dx:cat:InvalidUUID")) {
       response.setStatusCode(400).end(errorMessage);
-    }else {
+    } else {
       response.setStatusCode(500).end(errorMessage);
     }
   }
